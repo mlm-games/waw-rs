@@ -1,18 +1,16 @@
-use utils::set_panic_hook;
-use wasm_bindgen::prelude::wasm_bindgen;
-
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::AudioContext;
 
 pub mod filter;
 pub mod oscillator;
-mod utils;
 
 async fn polyfill(ctx: &AudioContext) {
     JsFuture::from(
         ctx.audio_worklet()
             .unwrap()
-            .add_module(&wasm_bindgen::link_to!(module = "/src/polyfill.min.js"))
+            .add_module(&wasm_bindgen::link_to!(module = "/polyfill.min.js"))
             .unwrap(),
     )
     .await
@@ -20,16 +18,65 @@ async fn polyfill(ctx: &AudioContext) {
 }
 
 #[wasm_bindgen(js_name = registerContext)]
-/// Create audio context with waw-rs worklets registered
 pub async fn register_context() -> AudioContext {
     let ctx = AudioContext::new().unwrap();
     polyfill(&ctx).await;
     waw::register_all(&ctx).await.unwrap();
-
     ctx
 }
 
 #[wasm_bindgen(start)]
-pub fn main() {
-    set_panic_hook();
+pub async fn main() -> Result<(), JsValue> {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+
+    let ctx = register_context().await;
+    let osc = oscillator::OscillatorNode::new(&ctx, 110.0)?;
+    let filter = filter::FilterNode::new(&ctx, 440.0)?;
+
+    let osc_node = osc.node();
+    let filter_node = filter.node();
+    web_sys::AudioNode::connect_with_audio_node(
+        osc_node.unchecked_ref(),
+        filter_node.unchecked_ref(),
+    )?;
+    web_sys::AudioNode::connect_with_audio_node(
+        filter_node.unchecked_ref(),
+        ctx.destination().unchecked_ref(),
+    )?;
+
+    let params = web_sys::AudioWorkletNode::parameters(&osc_node)?;
+    let frequency = web_sys::AudioParamMap::get(&params, "frequency")
+        .ok_or("no frequency param")?;
+
+    let window = web_sys::window().ok_or("no window")?;
+    let document = window.document().ok_or("no document")?;
+    let slider = document
+        .query_selector("#frequency")
+        .map_err(|_| "query failed")?
+        .ok_or("no slider")?;
+    let slider: web_sys::HtmlInputElement = slider.unchecked_into();
+    let slider_clone = slider.clone();
+
+    let freq = frequency;
+    let on_input = Closure::<dyn Fn()>::new(move || {
+        let val = slider.value().parse::<f32>().unwrap_or(440.0);
+        freq.set_value(val);
+    });
+    slider_clone.add_event_listener_with_callback(
+        "input",
+        on_input.as_ref().unchecked_ref::<js_sys::Function>(),
+    )?;
+    on_input.forget();
+
+    let resume = Closure::<dyn Fn()>::new(move || {
+        let _ = ctx.resume();
+    });
+    document.add_event_listener_with_callback(
+        "click",
+        resume.as_ref().unchecked_ref::<js_sys::Function>(),
+    )?;
+    resume.forget();
+
+    Ok(())
 }
