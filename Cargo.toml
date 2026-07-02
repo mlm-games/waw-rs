@@ -7,12 +7,7 @@ members = [
 ]
 
 [profile.release]
-# TODO opt-level = 1+ causes wasm-bindgen CLI interpreter panic:
-#       "unknown instruction Block" in wbg_cast. Seen up to wasm-bindgen 0.2.106.
-#       wasm-bindgen 0.2.120+ may fix it, but web-thread (pinned git dep) isn't
-#       compatible with newer wasm-bindgen yet. Need to fork and update.
-#       https://github.com/wasm-bindgen/wasm-bindgen/issues?q=unknown+instruction
-opt-level = 0
-# TODO: look into why this needs to be enabled.
-#       https://github.com/daxpedda/wasm-worker/blob/ce376d95dbdd9e7b59ac7de9c6f14090076f7865/src/thread/atomics/memory.rs#L26
-debug-assertions = true
+# wasm-bindgen 0.2.120+ fixed the CLI interpreter panic that required opt-level = 0.
+# If the panic still reproduces during wasm-pack build, set per-package profiles.
+opt-level = 3
+codegen-units = 1

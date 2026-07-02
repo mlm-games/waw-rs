@@ -5,7 +5,7 @@ build-std = ['std', 'panic_abort']
 target = ["wasm32-unknown-unknown"]
 rustflags = [ 
     "-Ctarget-feature=+atomics,+bulk-memory",
-    # TODO: https://github.com/wasm-bindgen/wasm-bindgen/issues/4727
+    # Sets max wasm memory to 4 GiB — needed for threaded/atomics builds
     "-Clink-arg=--max-memory=4294967296",
     "-Clink-arg=--shared-memory",
     "-Clink-arg=--import-memory",

@@ -2,7 +2,7 @@ use crate::{
     buffer::{InputBuffer, OutputBuffer, ParameterBuffer},
     processor::Processor,
 };
-use js_sys::{Array, Iterator, Object};
+use js_sys::{Array, Float32Array, Iterator, Object};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
