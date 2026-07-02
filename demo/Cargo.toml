@@ -13,17 +13,13 @@ default = ["console_error_panic_hook"]
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 waw = { path = "../waw" }
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
+wasm-bindgen = "0.2.126"
+wasm-bindgen-futures = "0.4.76"
 
-# The `console_error_panic_hook` crate provides better debugging of panics by
-# logging them with `console.error`. This is great for development, but requires
-# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
-# code size when deploying.
-console_error_panic_hook = { version = "0.1.6", optional = true }
+console_error_panic_hook = { version = "0.1.7", optional = true }
 
 [dependencies.web-sys]
-version = "0.3.80"
+version = "0.3.103"
 features = [
   "AudioContext",
   "AudioWorkletNode",

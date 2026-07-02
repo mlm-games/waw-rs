@@ -12,15 +12,15 @@ targets = ["wasm32-unknown-unknown"]
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 js-sys = "0.3.103"
-wasm-bindgen = { version = "0.2.120", default-features = false }
-wasm-bindgen-futures = "0.4.50"
+wasm-bindgen = { version = "0.2.126", default-features = false }
+wasm-bindgen-futures = "0.4.76"
 web-thread = { path = "../../wasm-worker", features = ["audio-worklet"] }
 
 [dependencies]
-inventory = "0.3.21"
+inventory = "0.3.24"
 
 [dependencies.web-sys]
-version = "0.3.80"
+version = "0.3.103"
 features = [
   "AudioContext",
   "AudioWorkletNode",
