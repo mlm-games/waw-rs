@@ -10,6 +10,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::AudioContext;
 
 /// Registration entry for inventory
+#[derive(Clone, Copy)]
 pub struct ProcessorRegistration {
     /// The name of the processor to register
     pub name: &'static str,
@@ -34,18 +35,22 @@ pub async fn register_all(ctx: &AudioContext) -> Result<(), JsValue> {
     let completed = Arc::new(AtomicBool::new(false));
     let completed_clone = completed.clone();
 
-    // Clone registrations for move into closure
+    // Collect registration results
+    let errors: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let errors_clone = errors.clone();
+
     let registrations: Vec<_> = inventory::iter::<ProcessorRegistration>()
-        .map(|reg| ProcessorRegistration::new(reg.name, reg.register_fn))
+        .map(|reg| *reg)
         .collect();
 
     ctx.clone()
         .register_thread(None, move || {
             for reg in &registrations {
                 if let Err(e) = (reg.register_fn)() {
-                    web_sys::console::error_1(
-                        &format!("Failed to register {}: {:?}", reg.name, e).into(),
-                    );
+                    errors_clone.lock().unwrap().push(format!(
+                        "Failed to register {}: {:?}",
+                        reg.name, e
+                    ));
                 }
             }
 
@@ -57,7 +62,14 @@ pub async fn register_all(ctx: &AudioContext) -> Result<(), JsValue> {
     while !completed.load(Ordering::Acquire) {
         web_thread::web::yield_now_async(web_thread::web::YieldTime::UserBlocking).await;
     }
-    web_thread::web::yield_now_async(web_thread::web::YieldTime::UserBlocking).await;
+
+    // Report any registration failures
+    let errors = errors.lock().unwrap();
+    if !errors.is_empty() {
+        let msg = errors.join("; ");
+        web_sys::console::error_1(&msg.clone().into());
+        return Err(JsValue::from_str(&msg));
+    }
 
     Ok(())
 }

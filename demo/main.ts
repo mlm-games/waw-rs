@@ -12,16 +12,15 @@ const main = async () => {
   const frequency = osc_1.node.parameters.get('frequency')!
 
   const handle_interaction = async () => {
-    void context?.resume();
+    void context.resume();
   };
-  
 
   const frequencyControl = document.querySelector<HTMLInputElement>("#frequency");
   if (!frequencyControl) throw new Error("Can't find frequency slider")
   frequencyControl.addEventListener(
     "input",
     () => {
-      frequency.value = parseInt(frequencyControl.value, 10)
+      frequency.value = parseFloat(frequencyControl.value)
     },
     false
   );

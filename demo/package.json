@@ -11,6 +11,6 @@
     "prebuild": "wasm-pack build --target web"
   },
   "devDependencies": {
-    "vite": "^3.2.2"
+    "vite": "^8.0.0"
   }
 }

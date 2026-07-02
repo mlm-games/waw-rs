@@ -20,7 +20,7 @@ web-thread = { git = "https://github.com/daxpedda/wasm-worker", rev = "ce376d95d
 inventory = "0.3.21"
 
 [dependencies.web-sys]
-version = "0.3.59"
+version = "0.3.80"
 features = [
   "AudioContext",
   "AudioWorkletNode",
@@ -28,5 +28,6 @@ features = [
   "AudioDestinationNode",
   "AudioWorkletProcessor",
   "AudioWorklet",
+  "AudioWorkletGlobalScope",
   "console"
 ]

@@ -45,7 +45,7 @@ impl Processor for OscillatorProcessor {
             if let Some(freq) = freq_buffer {
                 // Per-sample frequency automation
                 for (i, sample) in output_channel.iter_mut().enumerate() {
-                    let frequency = freq[i];
+                    let frequency = freq.get(i).copied().unwrap_or(self.frequency);
                     let phase_increment = frequency / sample_rate;
 
                     *sample = match self.waveform {

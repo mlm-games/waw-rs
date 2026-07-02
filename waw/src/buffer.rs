@@ -139,33 +139,16 @@ impl ChannelBuffer {
 
 /// Copies data from a JS Float32Array to a Rust Vec<f32> buffer.
 /// Handles Web Audio API parameter buffer semantics.
-fn copy_param_from_js(js_array: &Float32Array, buffer: &mut Vec<f32>) {
-    // Ensure buffer is sized to 128 samples (Web Audio render quantum size)
-    buffer.resize(128, 0.0);
+fn copy_param_from_js(js_array: &Float32Array, buffer: &mut Vec<f32>, buffer_size: usize) {
+    buffer.resize(buffer_size, 0.0);
 
-    match js_array.length() {
-        // If the automation rate of the parameter is "a-rate", the array will contain 128 values
-        // — one for each frame in the current audio block.
-        128 => {
-            js_array.copy_to(buffer.as_mut());
-        }
-
-        // If the automation rate is "k-rate", the array will contain a single value,
-        // which is to be used for each of 128 frames.
-        //
-        // If there's no automation happening during the time represented by the current block,
-        // the array may contain a single value that is constant for the entire block,
-        // instead of 128 identical values.
-        1 => {
-            buffer.fill(js_array.get_index(0));
-        }
-
-        // Other possibilities are not supported.
-        other => {
-            panic!(
-                "Float32Array length {other} not supported. Expected 1 (k-rate) or 128 (a-rate)."
-            );
-        }
+    let len = js_array.length() as usize;
+    if len == buffer_size {
+        js_array.copy_to(buffer.as_mut());
+    } else {
+        // k-rate (1 value) or unexpected length
+        let value = js_array.get_index(0);
+        buffer.fill(value);
     }
 }
 
@@ -273,32 +256,34 @@ impl ParameterBuffer {
     /// - If no automation, array may contain 1 value that's constant for entire block
     /// - If automation rate is "k-rate", array contains 1 value for all 128 frames
     pub fn fill_from_js(&mut self, params: &Object) {
-        // Clear existing parameter data
-        for buffer in self.params.values_mut() {
-            buffer.clear();
-        }
-
         let keys = Object::keys(params);
         for i in 0..keys.length() {
             let key_str = keys.get(i).as_string().unwrap_or_default();
             if let Ok(value) = Reflect::get(params, &key_str.clone().into()) {
                 if let Some(param_array) = value.dyn_ref::<Float32Array>() {
-                    // Get or create the buffer for this parameter
                     let buffer = self
                         .params
                         .entry(key_str)
                         .or_insert_with(|| Vec::with_capacity(self.buffer_size));
 
-                    // Copy parameter data from JS
-                    copy_param_from_js(param_array, buffer);
+                    copy_param_from_js(param_array, buffer, self.buffer_size);
                 }
             }
         }
     }
 
+    /// Updates the buffer size for all future parameter copies.
+    /// Call this when the render quantum size changes.
+    pub fn set_buffer_size(&mut self, buffer_size: usize) {
+        self.buffer_size = buffer_size;
+    }
+
+    /// Returns the current buffer size.
+    pub fn buffer_size(&self) -> usize {
+        self.buffer_size
+    }
+
     /// Returns a reference to the parameter values without cloning.
-    /// This is more efficient than cloning and the returned reference
-    /// provides access to the full parameter buffers.
     pub fn get_ref(&self) -> ParameterValuesRef<'_> {
         ParameterValuesRef {
             params: &self.params,
@@ -337,6 +322,11 @@ impl<'a> ParameterValuesRef<'a> {
     /// }
     /// ```
     pub fn get(&self, name: &str) -> Option<&[f32]> {
-        self.params.get(name).map(|v| v.as_slice())
+        let v = self.params.get(name)?;
+        if v.is_empty() {
+            None
+        } else {
+            Some(v.as_slice())
+        }
     }
 }

@@ -4,7 +4,6 @@ use waw::{register, AutomationRate, ParameterDescriptor, ParameterValuesRef, Pro
 #[derive(Clone)]
 pub struct FilterData {
     pub cutoff: f32,
-    pub resonance: f32,
 }
 
 pub struct FilterProcessor {
@@ -42,9 +41,9 @@ impl Processor for FilterProcessor {
                     .zip(output_channel.iter_mut())
                     .enumerate()
                 {
-                    let cutoff_value = cutoff[i];
+                    let cutoff_value = cutoff.get(i).copied().unwrap_or(self.cutoff);
                     let omega = 2.0 * std::f32::consts::PI * cutoff_value / sample_rate;
-                    let a = omega / (1.0 + omega).min(1.0);
+                    let a = (omega / (1.0 + omega)).min(1.0);
 
                     self.z1 = input_sample * a + self.z1 * (1.0 - a);
                     *output_sample = self.z1;
@@ -52,7 +51,7 @@ impl Processor for FilterProcessor {
             } else {
                 // Fallback: use initial cutoff value
                 let omega = 2.0 * std::f32::consts::PI * self.cutoff / sample_rate;
-                let a = omega / (1.0 + omega).min(1.0);
+                let a = (omega / (1.0 + omega)).min(1.0);
 
                 for (input_sample, output_sample) in
                     input_channel.iter().zip(output_channel.iter_mut())
@@ -65,22 +64,13 @@ impl Processor for FilterProcessor {
     }
 
     fn parameter_descriptors() -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor {
-                name: "cutoff".to_string(),
-                default_value: 1000.0,
-                min_value: 20.0,
-                max_value: 20000.0,
-                automation_rate: AutomationRate::ARate,
-            },
-            ParameterDescriptor {
-                name: "resonance".to_string(),
-                default_value: 1.0,
-                min_value: 0.1,
-                max_value: 30.0,
-                automation_rate: AutomationRate::KRate,
-            },
-        ]
+        vec![ParameterDescriptor {
+            name: "cutoff".to_string(),
+            default_value: 1000.0,
+            min_value: 20.0,
+            max_value: 20000.0,
+            automation_rate: AutomationRate::ARate,
+        }]
     }
 }
 
@@ -93,10 +83,7 @@ pub struct FilterNode {
 impl FilterNode {
     #[wasm_bindgen(constructor)]
     pub fn new(ctx: &web_sys::AudioContext, cutoff: f32) -> Result<FilterNode, JsValue> {
-        let data = FilterData {
-            cutoff,
-            resonance: 1.0,
-        };
+        let data = FilterData { cutoff };
 
         // Create options for an effect (1 input, 1 output)
         let options = web_sys::AudioWorkletNodeOptions::new();

@@ -8,18 +8,27 @@ This is all very experimental.
 
 ## Requirements
 
-This crate requires WebAssembly target features `+atomics` and `+bulk-memory` to function properly. These features are necessary for the underlying `web-thread` dependency that enables Audio Worklet support with shared memory and threading.
-
-### Minimal Configuration
-
-If you want a minimal setup (though the full configuration above is recommended), you can use:
+This crate **requires a nightly Rust toolchain**, WebAssembly target features `+atomics` and `+bulk-memory`, and `build-std` to recompile the standard library with threading support. A `.cargo/config.toml` like this is needed:
 
 ```toml
-[target.wasm32-unknown-unknown]
+[unstable]
+build-std = ['std', 'panic_abort']
+
+[build]
+target = ["wasm32-unknown-unknown"]
 rustflags = [
-  "-C", "target-feature=+atomics,+bulk-memory",
+    "-Ctarget-feature=+atomics,+bulk-memory",
+    "-Clink-arg=--shared-memory",
+    "-Clink-arg=--import-memory",
+    "-Clink-arg=--export=__wasm_init_tls",
+    "-Clink-arg=--export=__tls_size",
+    "-Clink-arg=--export=__tls_align",
+    "-Clink-arg=--export=__tls_base",
+    "--cfg=web_sys_unstable_apis",
 ]
 ```
+
+> **Note:** Audio Worklet contexts lack some browser APIs (`TextDecoder`, etc.). You may need a polyfill loaded via `audioWorklet.addModule(...)` before calling `register_all()`. See the [demo](demo) for an example.
 
 ## Usage
 
@@ -33,7 +42,7 @@ Implement the `Processor` trait and register your audio node:
 
 ```rust
 use wasm_bindgen::prelude::*;
-use waw::{register, ParameterValuesRef, Processor};
+use waw::{register, AudioWorkletNodeWrapper, ParameterValuesRef, Processor};
 
 #[derive(Clone)]
 pub struct MyData {
@@ -65,7 +74,7 @@ impl Processor for MyProcessor {
 
 #[wasm_bindgen]
 pub struct MyNode {
-    node: web_sys::AudioWorkletNode,
+    wrapper: AudioWorkletNodeWrapper,
 }
 
 #[wasm_bindgen]
@@ -79,13 +88,13 @@ impl MyNode {
         options.set_number_of_inputs(0);  // Generator: no inputs
         options.set_number_of_outputs(1); // Mono output
         
-        let node = MyProcessor::create_node(ctx, data, Some(&options))?;
-        Ok(MyNode { node })
+        let wrapper = MyProcessor::create_node(ctx, data, Some(&options))?;
+        Ok(MyNode { wrapper })
     }
 
     #[wasm_bindgen(getter)]
     pub fn node(&self) -> web_sys::AudioWorkletNode {
-        self.node.clone()
+        self.wrapper.node().clone()
     }
 }
 

@@ -1,5 +1,3 @@
-#![feature(associated_type_defaults)]
-#![feature(stmt_expr_attributes)]
 #![doc = include_str!("../../README.md")]
 #![warn(missing_docs)]
 

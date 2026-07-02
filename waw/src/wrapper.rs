@@ -26,6 +26,7 @@ pub struct ProcessorWrapper<P: Processor> {
     output_buffer: OutputBuffer,
     parameter_buffer: ParameterBuffer,
     is_active: Arc<AtomicBool>,
+    sample_rate: f32,
 }
 
 impl<P: Processor> ExtendAudioWorkletProcessor for ProcessorWrapper<P> {
@@ -40,9 +41,10 @@ impl<P: Processor> ExtendAudioWorkletProcessor for ProcessorWrapper<P> {
         let processor = P::new(wrapper_data.user_data);
         let is_active = wrapper_data.is_active;
 
-        // Initialize with minimal buffers - they will dynamically resize on first process() call
-        // based on what JavaScript provides in the inputs/outputs arrays.
-        // Web Audio API typically uses 128 samples per render quantum.
+        // Cache sample rate
+        let global: AudioWorkletGlobalScope = js_sys::global().unchecked_into();
+        let sample_rate = global.sample_rate();
+
         let initial_buffer_size = 128;
 
         let channel_count = options.get_channel_count().unwrap_or(1);
@@ -67,6 +69,7 @@ impl<P: Processor> ExtendAudioWorkletProcessor for ProcessorWrapper<P> {
             output_buffer,
             parameter_buffer,
             is_active,
+            sample_rate,
         }
     }
 
@@ -75,30 +78,37 @@ impl<P: Processor> ExtendAudioWorkletProcessor for ProcessorWrapper<P> {
             return false;
         }
 
-        let global: AudioWorkletGlobalScope = js_sys::global().unchecked_into();
-        let sample_rate = global.sample_rate();
-
-        // Fill input buffers from JS, handling resizing and zeroing
+        // Fill input buffers from JS
         self.input_buffer.fill_from_js(&inputs);
 
-        // Ensure output buffer matches the configuration from JS
-        self.output_buffer
-            .ensure_size(self.input_buffer.buffer_size());
+        // Derive output buffer size from the outputs array itself,
+        // not from the input buffer (generators have no inputs).
+        let output_block_size = if outputs.length() > 0 {
+            let ports: Array = outputs.get(0).unchecked_into();
+            if ports.length() > 0 {
+                let float_array: Float32Array = ports.get(0).unchecked_into();
+                float_array.length() as usize
+            } else {
+                128
+            }
+        } else {
+            128
+        };
+
+        self.output_buffer.ensure_size(output_block_size);
         self.output_buffer.ensure_channels_from_js(&outputs);
         self.output_buffer.clear();
 
+        self.parameter_buffer.set_buffer_size(output_block_size);
         self.parameter_buffer.fill_from_js(&parameters);
 
-        // Get references for processing
         let input_refs = self.input_buffer.get_refs();
         let mut output_refs = self.output_buffer.get_mut_refs();
         let params = self.parameter_buffer.get_ref();
 
-        // Process audio
         self.processor
-            .process(&input_refs, &mut output_refs, sample_rate, &params);
+            .process(&input_refs, &mut output_refs, self.sample_rate, &params);
 
-        // Copy output data back to JS
         self.output_buffer.copy_to_js(&outputs);
 
         true

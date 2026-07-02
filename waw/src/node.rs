@@ -1,4 +1,3 @@
-use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -8,7 +7,7 @@ use web_sys::AudioWorkletNode;
 
 /// A wrapper around `AudioWorkletNode` that signals the processor to stop when dropped.
 ///
-/// This ensures that when the node is dropped on the main thread, the processor running
+/// This ensures that when the last clone of the wrapper is dropped, the processor running
 /// in the AudioWorklet thread will stop processing on the next process call.
 pub struct AudioWorkletNodeWrapper {
     node: AudioWorkletNode,
@@ -28,12 +27,11 @@ impl AudioWorkletNodeWrapper {
 
     /// Consumes the wrapper and returns the underlying AudioWorkletNode.
     ///
-    /// Note: This will prevent the Drop implementation from running, so the processor
-    /// will continue processing even after the wrapper is dropped.
+    /// `Drop` is skipped so the processor continues running. The original
+    /// `is_active` flag is left as-is
     pub fn into_inner(self) -> AudioWorkletNode {
-        let manual = ManuallyDrop::new(self);
-        let node = manual.node.clone();
-        manual.is_active.store(true, Ordering::Release);
+        let node = self.node.clone();
+        std::mem::forget(self);
         node
     }
 }
@@ -48,7 +46,10 @@ impl Deref for AudioWorkletNodeWrapper {
 
 impl Drop for AudioWorkletNodeWrapper {
     fn drop(&mut self) {
-        self.is_active.store(false, Ordering::Release);
+        // Only deactivate when the last clone drops.
+        if Arc::strong_count(&self.is_active) == 1 {
+            self.is_active.store(false, Ordering::Release);
+        }
     }
 }
 
