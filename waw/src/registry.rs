@@ -1,13 +1,16 @@
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 
 use crate::node::AudioWorkletNodeWrapper;
 use crate::processor::Processor;
 use crate::wrapper::{ProcessorWrapper, ProcessorWrapperData};
 use wasm_bindgen::prelude::*;
+use web_thread::web::audio_worklet::BaseAudioContextExt;
 use web_sys::AudioContext;
+
+
 
 /// Registration entry for inventory
 #[derive(Clone, Copy)]
@@ -30,20 +33,17 @@ inventory::collect!(ProcessorRegistration);
 
 /// Register all processors in the given audio context
 pub async fn register_all(ctx: &AudioContext) -> Result<(), JsValue> {
-    use web_thread::web::audio_worklet::BaseAudioContextExt;
-
-    let completed = Arc::new(AtomicBool::new(false));
-    let completed_clone = completed.clone();
-
-    // Collect registration results
-    let errors: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let errors_clone = errors.clone();
-
     let registrations: Vec<_> = inventory::iter::<ProcessorRegistration>()
         .map(|reg| *reg)
         .collect();
 
-    ctx.clone()
+    let errors: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let errors_clone = errors.clone();
+    let completed = Arc::new(AtomicBool::new(false));
+    let completed_clone = completed.clone();
+
+    let _handle = ctx
+        .clone()
         .register_thread(None, move || {
             for reg in &registrations {
                 if let Err(e) = (reg.register_fn)() {
@@ -53,22 +53,24 @@ pub async fn register_all(ctx: &AudioContext) -> Result<(), JsValue> {
                     ));
                 }
             }
-
             completed_clone.store(true, Ordering::Release);
         })
         .await
-        .map_err(|e| JsValue::from_str(&format!("Failed to register thread: {:?}", e)))?;
+        .map_err(|e| JsValue::from_str(&format!("register_thread: {:?}", e)))?;
 
+    // `register_thread` returns before the closure finishes (ThreadMemory is sent
+    // before the user task runs). Wait for the closure to complete.
     while !completed.load(Ordering::Acquire) {
         web_thread::web::yield_now_async(web_thread::web::YieldTime::UserBlocking).await;
     }
 
-    // Report any registration failures
+    // Yield to allow AudioWorklet sync messages (from registerProcessor) to
+    // propagate to the main thread before creating AudioWorkletNodes.
+    web_thread::web::yield_now_async(web_thread::web::YieldTime::UserBlocking).await;
+
     let errors = errors.lock().unwrap();
     if !errors.is_empty() {
-        let msg = errors.join("; ");
-        web_sys::console::error_1(&msg.clone().into());
-        return Err(JsValue::from_str(&msg));
+        return Err(JsValue::from_str(&errors.join("; ")));
     }
 
     Ok(())

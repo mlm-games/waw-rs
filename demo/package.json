@@ -1,5 +1,8 @@
 {
   "name": "waw-demo",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
 }
