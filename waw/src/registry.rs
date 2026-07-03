@@ -7,6 +7,7 @@ use crate::node::AudioWorkletNodeWrapper;
 use crate::processor::Processor;
 use crate::wrapper::{ProcessorWrapper, ProcessorWrapperData};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 use web_thread::web::audio_worklet::BaseAudioContextExt;
 use web_sys::AudioContext;
 
@@ -64,13 +65,34 @@ pub async fn register_all(ctx: &AudioContext) -> Result<(), JsValue> {
         web_thread::web::yield_now_async(web_thread::web::YieldTime::UserBlocking).await;
     }
 
-    // Yield to allow AudioWorklet sync messages (from registerProcessor) to
-    // propagate to the main thread before creating AudioWorkletNodes.
-    web_thread::web::yield_now_async(web_thread::web::YieldTime::UserBlocking).await;
-
     let errors = errors.lock().unwrap();
     if !errors.is_empty() {
         return Err(JsValue::from_str(&errors.join("; ")));
+    }
+    drop(errors);
+
+    // Firefox's registerProcessor (AudioWorkletGlobalScope) dispatches an
+    // NS_DispatchToMainThread runnable to populate the AudioContext's param
+    // descriptor map (AudioContext::SetParamForWorkletName). The runnable
+    // goes to the main thread event queue, but yield_now_async uses
+    // MessageChannel (DOM port message queue) — a separate queue in Gecko.
+    // If the DOM queue is processed preferentially, yields via MessageChannel
+    // may not flush the pending runnable. We use setTimeout(0) instead, which
+    // goes through the timer queue, and yield repeatedly to allow the main
+    // thread event queue to be processed.
+    //
+    // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1519562
+    for _ in 0..200 {
+        let mut executor = |resolve: js_sys::Function, _reject: js_sys::Function| {
+            if let Some(window) = web_sys::window() {
+                let _ =
+                    window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 0);
+            }
+        };
+        let promise = js_sys::Promise::new(&mut executor);
+        JsFuture::from(promise)
+            .await
+            .map_err(|_| JsValue::from_str("yield failed"))?;
     }
 
     Ok(())
