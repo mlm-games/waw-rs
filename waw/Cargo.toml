@@ -14,7 +14,9 @@ targets = ["wasm32-unknown-unknown"]
 js-sys = "0.3.103"
 wasm-bindgen = { version = "0.2.126", default-features = false }
 wasm-bindgen-futures = "0.4.76"
-web-thread = { path = "../../wasm-worker", features = ["audio-worklet"] }
+web-thread = { git = "https://github.com/mlm-games/wasm-worker", features = [
+  "audio-worklet",
+] }
 
 [dependencies]
 inventory = "0.3.24"
@@ -29,5 +31,5 @@ features = [
   "AudioWorkletProcessor",
   "AudioWorklet",
   "AudioWorkletGlobalScope",
-  "console"
+  "console",
 ]
