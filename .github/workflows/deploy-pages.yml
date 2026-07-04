@@ -1,17 +1,12 @@
-name: Deploy demo to GitHub Pages
+name: Demo
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+    branches: [main, master]
+  pull_request:
 
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,36 +14,53 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: demo
+        working-directory: ./demo
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rust-src
-          targets: wasm32-unknown-unknown
+      - name: Add wasm target
+        run: rustup target add wasm32-unknown-unknown
 
       - name: Install trunk
-        uses: jetli/trunk-action@v0.5
+        uses: taiki-e/install-action@v2
         with:
-          version: latest
+          tool: trunk
 
       - name: Build with trunk
-        run: trunk build --release --public-url /waw-rs/
+        run: |
+          trunk build --release --public-url /${{ github.event.repository.name }}/
+          touch dist/.nojekyll
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
+      - name: Upload dist
+        uses: actions/upload-artifact@v6
         with:
+          name: demo-dist
           path: demo/dist
 
   deploy:
     needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
+      - name: Download dist
+        uses: actions/download-artifact@v7
+        with:
+          name: demo-dist
+          path: demo/dist
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: demo/dist
+
+      - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v5
