@@ -1,7 +1,7 @@
 [package]
 name = "waw-demo"
 version = "0.1.0"
-authors = ["Marcel Gleeson <gleeson.marcel@gmail.com>"]
+# authors = ["Marcel Gleeson <gleeson.marcel@gmail.com>"]
 edition = "2021"
 # NOTE: requires nightly toolchain for build-std and atomics support
 
@@ -11,26 +11,32 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["console_error_panic_hook"]
 
-[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+[dependencies]
 waw = { path = "../waw" }
-js-sys = "0.3.103"
-wasm-bindgen = "0.2.126"
-wasm-bindgen-futures = "0.4.76"
-
-console_error_panic_hook = { version = "0.1.7", optional = true }
-
-[dependencies.web-sys]
-version = "0.3.103"
-features = [
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
   "AudioContext",
   "AudioDestinationNode",
   "AudioNode",
   "AudioParam",
   "AudioParamMap",
   "AudioWorkletNode",
-  "Document",
-  "Element",
-  "EventTarget",
-  "HtmlInputElement",
   "Window",
-]
+] }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+repose-core = "0.21"
+repose-ui = "0.21"
+repose-material = "0.21"
+repose-platform = "0.21"
+repose-render-wgpu = "0.21"
+repose-text = "0.21"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+winit = { version = "0.30", features = ["rwh_05"] }
+wgpu = { version = "30", features = ["webgpu", "webgl"] }
+console_error_panic_hook = "0.1"
+console_log = "1"
+log = "0.4"

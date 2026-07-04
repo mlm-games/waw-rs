@@ -1,3 +1,8 @@
+use std::cell::RefCell;
+
+use repose_core::*;
+use repose_material::material3::{ButtonConfig, Slider, SliderConfig};
+use repose_ui::{TextStyle, *};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::AudioContext;
@@ -5,14 +10,73 @@ use web_sys::AudioContext;
 pub mod filter;
 pub mod oscillator;
 
-async fn register_context() -> Result<AudioContext, JsValue> {
-    let ctx = AudioContext::new().map_err(|e| {
-        JsValue::from_str(&format!("AudioContext::new: {:?}", e))
-    })?;
-    waw::register_all(&ctx).await.map_err(|e| {
-        JsValue::from_str(&format!("register_all: {:?}", e))
-    })?;
-    Ok(ctx)
+thread_local! {
+    static FREQ_PARAM: RefCell<Option<web_sys::AudioParam>> = RefCell::new(None);
+    static AUDIO_CTX: RefCell<Option<AudioContext>> = RefCell::new(None);
+    static RESUMED: RefCell<bool> = RefCell::new(false);
+}
+
+fn app(_s: &mut Scheduler, _rc: &repose_platform::RenderContext) -> View {
+    let th = theme();
+    let freq = remember_state_with_key("freq", || 440.0f32);
+    let current_freq = *freq.borrow();
+
+    let on_freq_change = {
+        let f = freq.clone();
+        move |new_val: f32| {
+            *f.borrow_mut() = new_val;
+            FREQ_PARAM.with(|p| {
+                if let Some(ref param) = *p.borrow() {
+                    let _ = param.set_value(new_val);
+                }
+            });
+            request_frame();
+        }
+    };
+
+    let on_toggle = move || {
+        RESUMED.with(|r| {
+            let mut resumed = r.borrow_mut();
+            if !*resumed {
+                AUDIO_CTX.with(|ctx| {
+                    if let Some(ref c) = *ctx.borrow() {
+                        let _ = c.resume();
+                    }
+                });
+                *resumed = true;
+            }
+            request_frame();
+        });
+    };
+
+    let resumed = RESUMED.with(|r| *r.borrow());
+
+    Column(Modifier::new()
+        .fill_max_size()
+        .background(th.background)
+        .padding(16.0)
+        .align_items(AlignItems::CENTER))
+    .child((
+        Text("Web Audio Worklet")
+            .size(24.0)
+            .color(th.on_background)
+            .modifier(Modifier::new().padding(8.0)),
+        Box(Modifier::new().height(24.0)),
+        Text(format!("Frequency: {:.0} Hz", current_freq))
+            .size(18.0)
+            .color(th.on_background),
+        Box(Modifier::new().height(8.0)),
+        Slider(current_freq, (20.0, 1200.0), Some(1.0), on_freq_change, SliderConfig::default()),
+        Box(Modifier::new().height(24.0)),
+        repose_material::material3::Button(
+            Modifier::new(),
+            on_toggle,
+            ButtonConfig::default(),
+            move || {
+                Text(if resumed { "Playing" } else { "Click to Play" })
+            },
+        ),
+    ))
 }
 
 #[wasm_bindgen(start)]
@@ -20,32 +84,14 @@ pub async fn main() -> Result<(), JsValue> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
-    let result = run().await;
-    match &result {
-        Err(e) => {
-            let msg = format!("Error: {:?}", e);
-            web_sys::console::error_1(&msg.clone().into());
-            if let Some(window) = web_sys::window() {
-                if let Some(doc) = window.document() {
-                    if let Some(body) = doc.body() {
-                        let el = doc.create_element("pre").ok();
-                        if let Some(el) = el {
-                            el.set_text_content(Some(&msg));
-                            let _ = body.append_child(&el);
-                        }
-                    }
-                }
-            }
-        }
-        Ok(()) => {}
-    }
-    result
-}
+    let ctx = AudioContext::new().map_err(|e| {
+        JsValue::from_str(&format!("AudioContext::new: {:?}", e))
+    })?;
+    waw::register_all(&ctx).await.map_err(|e| {
+        JsValue::from_str(&format!("register_all: {:?}", e))
+    })?;
 
-async fn run() -> Result<(), JsValue> {
-    let ctx = register_context().await?;
-
-    let osc = oscillator::OscillatorNode::new(&ctx, 110.0)?;
+    let osc = oscillator::OscillatorNode::new(&ctx, 440.0)?;
     let filter = filter::FilterNode::new(&ctx, 440.0)?;
 
     let osc_node = osc.node();
@@ -63,34 +109,13 @@ async fn run() -> Result<(), JsValue> {
     let frequency = web_sys::AudioParamMap::get(&params, "frequency")
         .ok_or("no frequency param")?;
 
-    let window = web_sys::window().ok_or("no window")?;
-    let document = window.document().ok_or("no document")?;
-    let slider = document
-        .query_selector("#frequency")
-        .map_err(|_| "query failed")?
-        .ok_or("no slider")?;
-    let slider: web_sys::HtmlInputElement = slider.unchecked_into();
-    let slider_clone = slider.clone();
+    FREQ_PARAM.with(|p| *p.borrow_mut() = Some(frequency));
+    AUDIO_CTX.with(|c| *c.borrow_mut() = Some(ctx));
 
-    let freq = frequency;
-    let on_input = Closure::<dyn Fn()>::new(move || {
-        let val = slider.value().parse::<f32>().unwrap_or(440.0);
-        freq.set_value(val);
-    });
-    slider_clone.add_event_listener_with_callback(
-        "input",
-        on_input.as_ref().unchecked_ref::<js_sys::Function>(),
-    )?;
-    on_input.forget();
-
-    let resume = Closure::<dyn Fn()>::new(move || {
-        let _ = ctx.resume();
-    });
-    document.add_event_listener_with_callback(
-        "click",
-        resume.as_ref().unchecked_ref::<js_sys::Function>(),
-    )?;
-    resume.forget();
+    let _ = repose_platform::web::run_web_app(
+        app,
+        repose_platform::web::WebOptions::new(None),
+    );
 
     Ok(())
 }
