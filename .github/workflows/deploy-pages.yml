@@ -38,7 +38,7 @@ jobs:
         run: trunk build --release --public-url /waw-rs/
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v6
+        uses: actions/upload-pages-artifact@v5
         with:
           path: demo/dist
 
