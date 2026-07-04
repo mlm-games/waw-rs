@@ -1,17 +1,24 @@
-[unstable]
-build-std = ['std', 'panic_abort']
-
-[build]
-target = ["wasm32-unknown-unknown"]
-rustflags = [ 
-    "-Ctarget-feature=+atomics,+bulk-memory",
-    # Sets max wasm memory to 4 GiB — needed for threaded/atomics builds
-    "-Clink-arg=--max-memory=4294967296",
-    "-Clink-arg=--shared-memory",
-    "-Clink-arg=--import-memory",
-    "-Clink-arg=--export=__wasm_init_tls",
-    "-Clink-arg=--export=__tls_size",
-    "-Clink-arg=--export=__tls_align",
-    "-Clink-arg=--export=__tls_base",
-    "--cfg=web_sys_unstable_apis",
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "-C",
+    "target-feature=+atomics,+bulk-memory",
+    "-C",
+    "link-arg=--shared-memory",
+    "-C",
+    "link-arg=--import-memory",
+    "-C",
+    "link-arg=--max-memory=1073741824",
+    "-C",
+    "link-arg=--export=__heap_base",
+    "-C",
+    "link-arg=--export=__wasm_init_tls",
+    "-C",
+    "link-arg=--export=__tls_size",
+    "-C",
+    "link-arg=--export=__tls_align",
+    "-C",
+    "link-arg=--export=__tls_base",
 ]
+
+[unstable]
+build-std = ["std", "panic_abort"]
