@@ -3257,7 +3257,7 @@ dependencies = [
 [[package]]
 name = "web-thread"
 version = "0.1.1"
-source = "git+https://github.com/mlm-games/wasm-worker#8b9cb7e6fda67030d74e432aca7ae86f1b663b75"
+source = "git+https://github.com/mlm-games/wasm-worker#d289eb12669f8c5c6db4fd7b8de4349a40a95b27"
 dependencies = [
  "atomic-waker",
  "js-sys",
