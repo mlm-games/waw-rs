@@ -34,4 +34,4 @@ pub use inventory;
 pub use js_sys;
 pub use wasm_bindgen;
 pub use web_sys;
-pub use web_thread;
+pub use web_workers;

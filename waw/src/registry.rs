@@ -8,7 +8,7 @@ use crate::processor::Processor;
 use crate::wrapper::{ProcessorWrapper, ProcessorWrapperData};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_thread::web::audio_worklet::BaseAudioContextExt;
+use web_workers::web::audio_worklet::BaseAudioContextExt;
 use web_sys::AudioContext;
 
 
@@ -62,7 +62,7 @@ pub async fn register_all(ctx: &AudioContext) -> Result<(), JsValue> {
     // `register_thread` returns before the closure finishes (ThreadMemory is sent
     // before the user task runs). Wait for the closure to complete.
     while !completed.load(Ordering::Acquire) {
-        web_thread::web::yield_now_async(web_thread::web::YieldTime::UserBlocking).await;
+        web_workers::web::yield_now_async(web_workers::web::YieldTime::UserBlocking).await;
     }
 
     let errors = errors.lock().unwrap();
@@ -105,7 +105,7 @@ pub fn create_node<P: Processor>(
     data: P::Data,
     options: Option<&web_sys::AudioWorkletNodeOptions>,
 ) -> Result<AudioWorkletNodeWrapper, JsValue> {
-    use web_thread::web::audio_worklet::BaseAudioContextExt;
+use web_workers::web::audio_worklet::BaseAudioContextExt;
 
     // Create the shared active state flag
     let is_active = Arc::new(AtomicBool::new(true));
