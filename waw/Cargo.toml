@@ -14,7 +14,7 @@ targets = ["wasm32-unknown-unknown"]
 js-sys = "0.3.103"
 wasm-bindgen = { version = "0.2.126", default-features = false }
 wasm-bindgen-futures = "0.4.76"
-web-workers = { version = "0.3.1", features = [
+web-workers = { version = "0.3", features = [
   "audio-worklet",
 ] }
 
